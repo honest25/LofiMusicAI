@@ -15,7 +15,7 @@ export interface ProcessOptions {
 }
 
 /**
- * Process an audio file with lo-fi effects
+ * Process an audio file with lo-fi effects using FFmpeg
  */
 export async function processAudio(options: ProcessOptions): Promise<string> {
   const { inputPath, effects, trackId } = options;
@@ -28,19 +28,15 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
   try {
     // Normalize effect values from 0-100 range to appropriate ranges for processing
     const normalizedEffects = {
-      vinylCrackle: effects.vinylCrackle / 100,
-      reverb: effects.reverb / 100,
-      beatSlowdown: 1 - (effects.beatSlowdown / 300), // Convert to speed ratio (0.92-1.0)
-      bassBoost: (effects.bassBoost / 100) * 12, // Convert to dB gain (0-12dB)
-      bitCrushing: Math.round((1 - effects.bitCrushing / 100) * 16), // Bit depth (8-16)
-      backgroundNoise: effects.backgroundNoise / 100
+      vinylCrackle: effects.vinylCrackle / 100,         // 0-1 range
+      reverb: effects.reverb / 100,                    // 0-1 range
+      beatSlowdown: 1 - (effects.beatSlowdown / 300),  // Convert to speed ratio (0.92-1.0)
+      bassBoost: (effects.bassBoost / 100) * 12,       // Convert to dB gain (0-12dB)
+      bitCrushing: Math.max(8, Math.round((1 - effects.bitCrushing / 100) * 16)), // Bit depth (8-16)
+      backgroundNoise: effects.backgroundNoise / 100    // 0-1 range
     };
     
     console.log(`Processing track ${trackId} with effects:`, JSON.stringify(normalizedEffects));
-    
-    // In a real implementation, we would use a proper audio processing library
-    // like ffmpeg to apply these effects. For this application, we'll do some
-    // basic file modification to actually create a different audio file.
     
     // First, check if input file exists and is readable
     try {
@@ -57,122 +53,101 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
       await fs.mkdir(outputDir, { recursive: true });
     }
     
-    // Read the original file
-    const inputBuffer = await fs.readFile(inputPath);
-    
-    // Create a modified version based on effects
-    let outputBuffer = Buffer.from(inputBuffer); // Start with a copy
-    
-    // Apply audio "effects" by modifying the buffer
-    // Note: These are not real audio processing algorithms, just binary manipulations
-    // to create an audibly different file for demonstration purposes
-
-    // Create a buffer with the same size as input
-    const fileSize = inputBuffer.length;
-    
-    // Skip the header (first 44 bytes for WAV, varies for MP3)
-    // We'll start modifications after the file header to avoid corrupting the file format
-    const headerSize = inputExt.toLowerCase() === '.wav' ? 44 : 128;
-    
-    // Apply "vinyl crackle" by adding some noise
-    if (normalizedEffects.vinylCrackle > 0.1) {
-      const crackleFactor = normalizedEffects.vinylCrackle * 10;
-      for (let i = headerSize; i < fileSize; i += 1000) {
-        if (Math.random() < normalizedEffects.vinylCrackle) {
-          // Add some noise at random positions
-          const noiseValue = Math.floor(Math.random() * crackleFactor);
-          if (i < outputBuffer.length) {
-            outputBuffer[i] = Math.min(255, outputBuffer[i] + noiseValue);
-          }
-        }
-      }
+    // Prepare temporary files for effects processing
+    const tempDir = path.join(outputDir, 'temp');
+    if (!fsSync.existsSync(tempDir)) {
+      await fs.mkdir(tempDir, { recursive: true });
     }
     
-    // Apply "bit crushing" by reducing bit depth (zeroing out LSBs)
+    // Generate crackle noise file if vinyl crackle effect is desired
+    const crackleFile = path.join(tempDir, 'crackle.wav');
+    if (normalizedEffects.vinylCrackle > 0.05) {
+      const crackleIntensity = normalizedEffects.vinylCrackle * 0.2; // Scale down for mixing
+      const crackleCmd = `ffmpeg -y -f lavfi -i "anoisesrc=amplitude=${crackleIntensity}:color=pink" -t 3 "${crackleFile}"`;
+      console.log(`Generating vinyl crackle: ${crackleCmd}`);
+      await execAsync(crackleCmd);
+    }
+    
+    // Generate room noise if background noise effect is desired
+    const noiseFile = path.join(tempDir, 'noise.wav');
+    if (normalizedEffects.backgroundNoise > 0.05) {
+      const noiseIntensity = normalizedEffects.backgroundNoise * 0.15; // Scale down for mixing
+      const noiseCmd = `ffmpeg -y -f lavfi -i "anoisesrc=amplitude=${noiseIntensity}:color=brown" -t 3 "${noiseFile}"`;
+      console.log(`Generating background noise: ${noiseCmd}`);
+      await execAsync(noiseCmd);
+    }
+    
+    // Build the FFmpeg command with all effects
+    let ffmpegCmd = `ffmpeg -y -i "${inputPath}"`;
+    
+    // Add tempo change (beatSlowdown)
+    let filterComplex = `[0:a]atempo=${normalizedEffects.beatSlowdown}[slowed]`;
+    let lastOutput = 'slowed';
+    
+    // Add bass boost using equalizer
+    if (normalizedEffects.bassBoost > 0.5) {
+      const bassGain = normalizedEffects.bassBoost;
+      filterComplex += `;[${lastOutput}]equalizer=f=100:width_type=h:width=200:g=${bassGain}[boosted]`;
+      lastOutput = 'boosted';
+    }
+    
+    // Add bit crushing (lo-fi effect)
     if (normalizedEffects.bitCrushing < 16) {
-      const bitMask = 0xFF - ((1 << (16 - normalizedEffects.bitCrushing)) - 1);
-      for (let i = headerSize; i < fileSize; i += 2) {
-        if (i < outputBuffer.length) {
-          outputBuffer[i] = outputBuffer[i] & bitMask;
-        }
-      }
+      const bitDepth = normalizedEffects.bitCrushing;
+      filterComplex += `;[${lastOutput}]aresample=48000,acrusher=bits=${bitDepth}:mode=lin[crushed]`;
+      lastOutput = 'crushed';
     }
     
-    // Apply "bass boost" by amplifying certain sections
-    if (normalizedEffects.bassBoost > 0) {
-      const boostFactor = normalizedEffects.bassBoost / 6; // scale to reasonable values
-      for (let i = headerSize; i < fileSize; i += 200) {
-        if (i < outputBuffer.length) {
-          // Amplify every 200th byte to simulate bass boost
-          outputBuffer[i] = Math.min(255, Math.floor(outputBuffer[i] * (1 + boostFactor)));
-        }
-      }
-    }
-    
-    // Apply "reverb" effect by adding delayed copies
+    // Add reverb effect
     if (normalizedEffects.reverb > 0.1) {
-      // Create a delayed version of the signal to simulate reverb
-      const delayAmount = Math.floor(normalizedEffects.reverb * 800); // 0-80ms delay
-      const mixAmount = normalizedEffects.reverb * 0.5; // 0-50% mix
-      
-      // Add a delayed copy of the audio data
-      for (let i = headerSize + delayAmount; i < fileSize; i++) {
-        if (i < outputBuffer.length && (i - delayAmount) < outputBuffer.length) {
-          // Mix in the delayed signal
-          outputBuffer[i] = Math.min(255, Math.floor(
-            outputBuffer[i] * (1 - mixAmount) + 
-            outputBuffer[i - delayAmount] * mixAmount
-          ));
-        }
-      }
+      const reverbAmount = normalizedEffects.reverb * 100;
+      filterComplex += `;[${lastOutput}]areverb=wet_level=${reverbAmount}:room_scale=50:stereo_depth=100[reverbed]`;
+      lastOutput = 'reverbed';
     }
     
-    // Apply background noise
-    if (normalizedEffects.backgroundNoise > 0.1) {
-      const noiseAmount = normalizedEffects.backgroundNoise * 15;
-      for (let i = headerSize; i < fileSize; i += 8) {
-        if (i < outputBuffer.length) {
-          // Add static noise
-          const noise = Math.floor(Math.random() * noiseAmount);
-          outputBuffer[i] = Math.min(255, outputBuffer[i] + noise);
-        }
-      }
-    }
-
-    // Apply "beat slowdown" by duplicating some sections
-    if (normalizedEffects.beatSlowdown < 0.98) {
-      // Create a new buffer with extra space for the slowdown effect
-      const slowdownFactor = (1 / normalizedEffects.beatSlowdown);
-      const newSize = Math.min(fileSize * 1.5, fileSize * slowdownFactor); // limit size increase
-      const slowedBuffer = Buffer.alloc(Math.floor(newSize));
-      
-      // Copy header
-      outputBuffer.copy(slowedBuffer, 0, 0, headerSize);
-      
-      // Add duplicated sections to simulate slowdown
-      let outputPos = headerSize;
-      for (let i = headerSize; i < fileSize; i++) {
-        if (outputPos < slowedBuffer.length) {
-          slowedBuffer[outputPos++] = outputBuffer[i];
-          
-          // Duplicate some bytes based on slowdown factor
-          if (i % 1000 < (slowdownFactor - 1) * 500) {
-            // Duplicate this byte to slow down
-            if (outputPos < slowedBuffer.length) {
-              slowedBuffer[outputPos++] = outputBuffer[i];
-            }
-          }
-        }
-      }
-      
-      outputBuffer = slowedBuffer;
+    // Mix with vinyl crackle if needed
+    if (normalizedEffects.vinylCrackle > 0.05) {
+      // Add the crackle file as input
+      ffmpegCmd += ` -i "${crackleFile}"`;
+      // Extend the crackle to match the length of the original audio with loop
+      filterComplex += `;[1:a]aloop=loop=-1:size=44100[crackle]`;
+      // Mix the crackle with the processed audio
+      const crackleMix = normalizedEffects.vinylCrackle;
+      filterComplex += `;[${lastOutput}][crackle]amix=inputs=2:duration=first:weights=${1-crackleMix} ${crackleMix}[crackled]`;
+      lastOutput = 'crackled';
     }
     
-    // Write the modified buffer to the output file
-    await fs.writeFile(outputPath, outputBuffer);
-    console.log(`Created actual Lo-Fi output file: ${outputPath}`);
+    // Mix with background noise if needed
+    if (normalizedEffects.backgroundNoise > 0.05) {
+      // Add the noise file as input
+      ffmpegCmd += ` -i "${noiseFile}"`;
+      // Extend the noise to match the length of the original audio with loop
+      filterComplex += `;[2:a]aloop=loop=-1:size=44100[noise]`;
+      // Mix the noise with the processed audio
+      const noiseMix = normalizedEffects.backgroundNoise;
+      filterComplex += `;[${lastOutput}][noise]amix=inputs=2:duration=first:weights=${1-noiseMix} ${noiseMix}[noised]`;
+      lastOutput = 'noised';
+    }
     
-    // Ensure the file was actually copied
+    // Complete the filter complex
+    ffmpegCmd += ` -filter_complex "${filterComplex}" -map [${lastOutput}] "${outputPath}"`;
+    
+    console.log(`Running FFmpeg command: ${ffmpegCmd}`);
+    
+    // Execute the FFmpeg command
+    const { stdout, stderr } = await execAsync(ffmpegCmd);
+    console.log('FFmpeg stdout:', stdout);
+    console.log('FFmpeg stderr:', stderr);
+    
+    // Clean up temporary files
+    if (fsSync.existsSync(crackleFile)) {
+      await fs.unlink(crackleFile);
+    }
+    if (fsSync.existsSync(noiseFile)) {
+      await fs.unlink(noiseFile);
+    }
+    
+    // Ensure the output file was created successfully
     try {
       await fs.access(outputPath, fs.constants.R_OK);
       const outStats = await fs.stat(outputPath);
@@ -185,33 +160,16 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
       throw new Error(`Failed to verify output file: ${outputPath}`);
     }
     
-    // Calculate processing time based on effects intensity - more intense effects take longer
-    const effectsIntensity = (
-      effects.vinylCrackle + 
-      effects.reverb + 
-      effects.beatSlowdown + 
-      effects.bassBoost + 
-      effects.bitCrushing + 
-      effects.backgroundNoise
-    ) / 600; // Scale to 0-1 range
-    
-    // Simulate processing time (1-5 seconds)
-    const processingTime = Math.min(5000, 1000 + (fileSize / 1000000) * 500 + effectsIntensity * 2000);
-    console.log(`Simulating processing time: ${processingTime}ms for track ${trackId}`);
-    
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, processingTime));
-    
     console.log(`Lo-Fi processing complete for track ${trackId}`);
     return outputPath;
   } catch (error) {
     console.error(`Error processing audio for track ${trackId}:`, error);
-    throw new Error(`Failed to process audio file: ${error.message}`);
+    throw new Error(`Failed to process audio file: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
- * Get audio file metadata (duration, etc.)
+ * Get audio file metadata (duration, etc.) using FFmpeg
  */
 export async function getAudioMetadata(filePath: string): Promise<{ duration: number }> {
   try {
@@ -234,31 +192,47 @@ export async function getAudioMetadata(filePath: string): Promise<{ duration: nu
     
     console.log(`Processing audio metadata for file: ${filePath} (${fileSize} bytes)`);
     
-    // In a full implementation, we would use a library like music-metadata
-    // For this demo, we'll return a simulated duration based on file size
-    
-    // Different bitrates for different extensions
-    const ext = path.extname(filePath).toLowerCase();
-    let bitrate = 128000; // Default to 128kbps for MP3
-    
-    if (ext === '.wav') {
-      // WAV files are usually uncompressed, larger files
-      bitrate = 1411000; // CD quality WAV
-    } else if (ext === '.ogg') {
-      bitrate = 160000; // Typical OGG Vorbis bitrate
-    } else if (ext === '.flac') {
-      bitrate = 900000; // Typical FLAC bitrate
+    // Use FFmpeg to get accurate duration
+    const cmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
+    try {
+      const { stdout } = await execAsync(cmd);
+      const duration = parseFloat(stdout.trim());
+      
+      if (isNaN(duration) || duration <= 0) {
+        throw new Error('Invalid duration value from FFmpeg');
+      }
+      
+      console.log(`FFmpeg duration for ${path.basename(filePath)}: ${duration} seconds`);
+      
+      return {
+        duration: Math.round(duration)
+      };
+    } catch (ffmpegError) {
+      console.error('Error getting duration with FFmpeg:', ffmpegError);
+      
+      // Fallback to estimation if FFmpeg fails
+      const ext = path.extname(filePath).toLowerCase();
+      let bitrate = 128000; // Default to 128kbps for MP3
+      
+      if (ext === '.wav') {
+        // WAV files are usually uncompressed, larger files
+        bitrate = 1411000; // CD quality WAV
+      } else if (ext === '.ogg') {
+        bitrate = 160000; // Typical OGG Vorbis bitrate
+      } else if (ext === '.flac') {
+        bitrate = 900000; // Typical FLAC bitrate
+      }
+      
+      // Calculate duration: file size in bits / bitrate = seconds
+      // Rough estimate: fileSize (bytes) * 8 (bits per byte) / bitrate (bits per second)
+      const estimatedDuration = Math.max(1, Math.round((fileSize * 8) / bitrate));
+      
+      console.log(`Estimated duration for ${path.basename(filePath)}: ${estimatedDuration} seconds (fallback method)`);
+      
+      return {
+        duration: estimatedDuration
+      };
     }
-    
-    // Calculate duration: file size in bits / bitrate = seconds
-    // Rough estimate: fileSize (bytes) * 8 (bits per byte) / bitrate (bits per second)
-    const estimatedDuration = Math.max(1, Math.round((fileSize * 8) / bitrate));
-    
-    console.log(`Estimated duration for ${path.basename(filePath)}: ${estimatedDuration} seconds`);
-    
-    return {
-      duration: estimatedDuration
-    };
   } catch (error) {
     console.error('Error getting audio metadata:', error);
     return { duration: 0 };
