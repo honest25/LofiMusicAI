@@ -194,20 +194,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         await fsPromises.access(filePath);
       } catch (error) {
+        console.error(`File not found: ${filePath}`);
         return res.status(404).json({ message: 'Audio file not found' });
       }
       
       // Get file stats for Content-Length header
       const stats = await fsPromises.stat(filePath);
       
-      // Set headers for audio streaming
-      res.setHeader('Content-Type', path.extname(filename) === '.mp3' ? 'audio/mpeg' : 'audio/wav');
-      res.setHeader('Content-Length', stats.size);
-      res.setHeader('Content-Disposition', `inline; filename=${filename}`);
+      // Handle range request for streaming
+      const range = req.headers.range;
       
-      // Stream the file
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
+      if (range) {
+        // Parse Range header
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+        const chunkSize = (end - start) + 1;
+        
+        // Create headers
+        const headers = {
+          'Content-Range': `bytes ${start}-${end}/${stats.size}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': path.extname(filename) === '.mp3' ? 'audio/mpeg' : 'audio/wav',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        };
+        
+        // HTTP Status 206 for Partial Content
+        res.writeHead(206, headers);
+        
+        // Stream the chunk
+        const fileStream = fs.createReadStream(filePath, { start, end });
+        fileStream.pipe(res);
+      } else {
+        // Full file response
+        const headers = {
+          'Content-Length': stats.size,
+          'Content-Type': path.extname(filename) === '.mp3' ? 'audio/mpeg' : 'audio/wav',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        };
+        
+        res.writeHead(200, headers);
+        
+        // Stream the file
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+      }
     } catch (error) {
       console.error('Error streaming audio:', error);
       res.status(500).json({ message: 'Failed to stream audio file' });

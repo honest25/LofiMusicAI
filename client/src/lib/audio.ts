@@ -10,11 +10,44 @@ const audioInstances = new Map<string, AudioInstance>();
 
 // Create or get an audio instance
 export function getAudioInstance(id: string, src: string): AudioInstance {
-  if (!audioInstances.has(id)) {
+  // Check if we need to update the src or create a new instance
+  const existingInstance = audioInstances.get(id);
+  const currentSrc = existingInstance?.howl ? (existingInstance.howl as any)._src : null;
+  
+  if (!audioInstances.has(id) || !currentSrc || currentSrc[0] !== src) {
+    // If there's an existing instance, unload it first
+    if (audioInstances.has(id)) {
+      const existing = audioInstances.get(id);
+      if (existing && existing.howl) {
+        existing.howl.unload();
+      }
+    }
+    
+    // Create a new instance with the current src
     const howl = new Howl({
       src: [src],
       html5: true, // Enable streaming
-      preload: true
+      preload: true,
+      format: ['mp3'], // Explicitly specify format
+      xhr: {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    });
+    
+    console.log(`Creating new Howl instance for ${id} with src: ${src}`);
+    
+    // Monitor loading state
+    howl.once('load', () => {
+      console.log(`Howl loaded successfully for ${id}`);
+    });
+    
+    howl.on('loaderror', (id, err) => {
+      console.error(`Howl load error for ${id}:`, err);
     });
     
     audioInstances.set(id, {
