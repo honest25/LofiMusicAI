@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
+import fsPromises from 'fs/promises';
 import { nanoid } from 'nanoid';
 import { insertTrackSchema, effectsSchema, updateEffectsSchema } from "@shared/schema";
 import { processAudio, getAudioMetadata } from "./audioProcessor";
@@ -24,7 +25,9 @@ const storage_config = multer.diskStorage({
 
 // Create upload directory if it doesn't exist
 try {
-  fs.mkdir(uploadDir, { recursive: true });
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
 } catch (error) {
   console.error("Failed to create upload directory:", error);
 }
@@ -189,13 +192,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const filePath = path.resolve(uploadDir, filename);
       
       try {
-        await fs.access(filePath);
+        await fsPromises.access(filePath);
       } catch (error) {
         return res.status(404).json({ message: 'Audio file not found' });
       }
       
       // Get file stats for Content-Length header
-      const stats = await fs.stat(filePath);
+      const stats = await fsPromises.stat(filePath);
       
       // Set headers for audio streaming
       res.setHeader('Content-Type', path.extname(filename) === '.mp3' ? 'audio/mpeg' : 'audio/wav');
