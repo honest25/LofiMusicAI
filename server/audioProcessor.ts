@@ -98,10 +98,13 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
       lastOutput = 'crushed';
     }
     
-    // Add reverb effect
+    // Add reverb effect - using aecho as FFmpeg doesn't have areverb filter
     if (normalizedEffects.reverb > 0.1) {
-      const reverbAmount = normalizedEffects.reverb * 100;
-      filterComplex += `;[${lastOutput}]areverb=wet_level=${reverbAmount}:room_scale=50:stereo_depth=100[reverbed]`;
+      const delay = Math.floor(normalizedEffects.reverb * 500); // 0-500ms delay
+      const decay = normalizedEffects.reverb * 0.8; // 0-0.8 decay factor
+      
+      // Multiple echos with progressively longer delays and lower volume create reverb effect
+      filterComplex += `;[${lastOutput}]aecho=0.8:0.9:${delay}:0.3,aecho=0.8:0.9:${delay*1.5}:0.2,aecho=0.8:0.7:${delay*2}:0.1[reverbed]`;
       lastOutput = 'reverbed';
     }
     
