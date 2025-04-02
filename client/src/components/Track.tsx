@@ -256,13 +256,40 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
             </div>
           </div>
           
-          <AudioPlayer 
-            track={track}
-            originalProgress={originalProgress}
-            lofiProgress={lofiProgress}
-            setOriginalProgress={setOriginalProgress}
-            setLofiProgress={setLofiProgress}
-          />
+          {/* Native HTML5 Audio players for better compatibility */}
+          <div className="mb-6 space-y-4">
+            <div className="p-4 border border-gray-700 rounded-md bg-gray-800/50">
+              <h4 className="text-md font-bold mb-3 flex items-center">
+                <Music className="h-4 w-4 mr-2 text-primary" /> 
+                Original Track
+              </h4>
+              <audio 
+                controls 
+                className="w-full" 
+                src={`/api/audio/${track.originalPath.split('/').pop()}`}
+                preload="metadata"
+              >
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+            
+            {track.lofiPath && (
+              <div className="p-4 border border-gray-700 rounded-md bg-gray-800/50">
+                <h4 className="text-md font-bold mb-3 flex items-center">
+                  <Music className="h-4 w-4 mr-2 text-purple-400" /> 
+                  Lo-Fi Version
+                </h4>
+                <audio 
+                  controls 
+                  className="w-full" 
+                  src={`/api/audio/${track.lofiPath.split('/').pop()}`}
+                  preload="metadata"
+                >
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
+            )}
+          </div>
           
           <EffectControls 
             track={track}
