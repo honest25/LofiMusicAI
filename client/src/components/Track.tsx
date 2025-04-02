@@ -9,6 +9,7 @@ import { Track as TrackType, TrackProgress, Effects } from "@/lib/types";
 import { Progress } from "@/components/ui/progress";
 import { formatFileSize } from "@/lib/audio";
 import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   AlertDialog,
   AlertDialogAction,
