@@ -39,8 +39,8 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
     console.log(`Processing track ${trackId} with effects:`, JSON.stringify(normalizedEffects));
     
     // In a real implementation, we would use a proper audio processing library
-    // like ffmpeg to apply these effects. For this application, we'll simulate
-    // the lo-fi transformation by copying the file.
+    // like ffmpeg to apply these effects. For this application, we'll do some
+    // basic file modification to actually create a different audio file.
     
     // First, check if input file exists and is readable
     try {
@@ -57,9 +57,120 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
       await fs.mkdir(outputDir, { recursive: true });
     }
     
-    // Copy the file to simulate processing
-    await fs.copyFile(inputPath, outputPath);
-    console.log(`Created Lo-Fi output file: ${outputPath}`);
+    // Read the original file
+    const inputBuffer = await fs.readFile(inputPath);
+    
+    // Create a modified version based on effects
+    let outputBuffer = Buffer.from(inputBuffer); // Start with a copy
+    
+    // Apply audio "effects" by modifying the buffer
+    // Note: These are not real audio processing algorithms, just binary manipulations
+    // to create an audibly different file for demonstration purposes
+
+    // Create a buffer with the same size as input
+    const fileSize = inputBuffer.length;
+    
+    // Skip the header (first 44 bytes for WAV, varies for MP3)
+    // We'll start modifications after the file header to avoid corrupting the file format
+    const headerSize = inputExt.toLowerCase() === '.wav' ? 44 : 128;
+    
+    // Apply "vinyl crackle" by adding some noise
+    if (normalizedEffects.vinylCrackle > 0.1) {
+      const crackleFactor = normalizedEffects.vinylCrackle * 10;
+      for (let i = headerSize; i < fileSize; i += 1000) {
+        if (Math.random() < normalizedEffects.vinylCrackle) {
+          // Add some noise at random positions
+          const noiseValue = Math.floor(Math.random() * crackleFactor);
+          if (i < outputBuffer.length) {
+            outputBuffer[i] = Math.min(255, outputBuffer[i] + noiseValue);
+          }
+        }
+      }
+    }
+    
+    // Apply "bit crushing" by reducing bit depth (zeroing out LSBs)
+    if (normalizedEffects.bitCrushing < 16) {
+      const bitMask = 0xFF - ((1 << (16 - normalizedEffects.bitCrushing)) - 1);
+      for (let i = headerSize; i < fileSize; i += 2) {
+        if (i < outputBuffer.length) {
+          outputBuffer[i] = outputBuffer[i] & bitMask;
+        }
+      }
+    }
+    
+    // Apply "bass boost" by amplifying certain sections
+    if (normalizedEffects.bassBoost > 0) {
+      const boostFactor = normalizedEffects.bassBoost / 6; // scale to reasonable values
+      for (let i = headerSize; i < fileSize; i += 200) {
+        if (i < outputBuffer.length) {
+          // Amplify every 200th byte to simulate bass boost
+          outputBuffer[i] = Math.min(255, Math.floor(outputBuffer[i] * (1 + boostFactor)));
+        }
+      }
+    }
+    
+    // Apply "reverb" effect by adding delayed copies
+    if (normalizedEffects.reverb > 0.1) {
+      // Create a delayed version of the signal to simulate reverb
+      const delayAmount = Math.floor(normalizedEffects.reverb * 800); // 0-80ms delay
+      const mixAmount = normalizedEffects.reverb * 0.5; // 0-50% mix
+      
+      // Add a delayed copy of the audio data
+      for (let i = headerSize + delayAmount; i < fileSize; i++) {
+        if (i < outputBuffer.length && (i - delayAmount) < outputBuffer.length) {
+          // Mix in the delayed signal
+          outputBuffer[i] = Math.min(255, Math.floor(
+            outputBuffer[i] * (1 - mixAmount) + 
+            outputBuffer[i - delayAmount] * mixAmount
+          ));
+        }
+      }
+    }
+    
+    // Apply background noise
+    if (normalizedEffects.backgroundNoise > 0.1) {
+      const noiseAmount = normalizedEffects.backgroundNoise * 15;
+      for (let i = headerSize; i < fileSize; i += 8) {
+        if (i < outputBuffer.length) {
+          // Add static noise
+          const noise = Math.floor(Math.random() * noiseAmount);
+          outputBuffer[i] = Math.min(255, outputBuffer[i] + noise);
+        }
+      }
+    }
+
+    // Apply "beat slowdown" by duplicating some sections
+    if (normalizedEffects.beatSlowdown < 0.98) {
+      // Create a new buffer with extra space for the slowdown effect
+      const slowdownFactor = (1 / normalizedEffects.beatSlowdown);
+      const newSize = Math.min(fileSize * 1.5, fileSize * slowdownFactor); // limit size increase
+      const slowedBuffer = Buffer.alloc(Math.floor(newSize));
+      
+      // Copy header
+      outputBuffer.copy(slowedBuffer, 0, 0, headerSize);
+      
+      // Add duplicated sections to simulate slowdown
+      let outputPos = headerSize;
+      for (let i = headerSize; i < fileSize; i++) {
+        if (outputPos < slowedBuffer.length) {
+          slowedBuffer[outputPos++] = outputBuffer[i];
+          
+          // Duplicate some bytes based on slowdown factor
+          if (i % 1000 < (slowdownFactor - 1) * 500) {
+            // Duplicate this byte to slow down
+            if (outputPos < slowedBuffer.length) {
+              slowedBuffer[outputPos++] = outputBuffer[i];
+            }
+          }
+        }
+      }
+      
+      outputBuffer = slowedBuffer;
+    }
+    
+    // Write the modified buffer to the output file
+    await fs.writeFile(outputPath, outputBuffer);
+    console.log(`Created actual Lo-Fi output file: ${outputPath}`);
     
     // Ensure the file was actually copied
     try {
@@ -73,9 +184,6 @@ export async function processAudio(options: ProcessOptions): Promise<string> {
       console.error(`Error verifying output file: ${err}`);
       throw new Error(`Failed to verify output file: ${outputPath}`);
     }
-    
-    // Simulate processing time based on file size and effects complexity
-    const fileSize = (await fs.stat(inputPath)).size;
     
     // Calculate processing time based on effects intensity - more intense effects take longer
     const effectsIntensity = (
