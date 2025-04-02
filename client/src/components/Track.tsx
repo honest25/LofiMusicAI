@@ -125,7 +125,12 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
   // Render based on track status
   if (track.status === 'uploading' || track.status === 'processing') {
     return (
-      <div className="bg-gray-800 rounded-xl p-6 mb-6">
+      <motion.div 
+        className="bg-gray-800 rounded-xl p-6 mb-6 scale-in"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-shrink-0 w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
             <Music className="h-8 w-8 text-gray-500" />
@@ -144,16 +149,21 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
                 </span>
               </div>
             </div>
-            <Progress value={processingProgress} className="w-full h-2" />
+            <Progress value={processingProgress} className="w-full h-2 animate-pulse" />
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   if (track.status === 'error') {
     return (
-      <div className="bg-gray-800 rounded-xl p-6 mb-6">
+      <motion.div 
+        className="bg-gray-800 rounded-xl p-6 mb-6"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-shrink-0 w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
             <Music className="h-8 w-8 text-red-500" />
@@ -161,19 +171,34 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
           <div className="flex-grow">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
               <div>
-                <h4 className="text-lg font-medium">{track.originalFilename}</h4>
-                <p className="text-gray-400 text-sm">
+                <h4 className="text-lg font-medium fade-in">{track.originalFilename}</h4>
+                <p className="text-gray-400 text-sm fade-in" style={{ animationDelay: '0.1s' }}>
                   {track.originalFilename.split('.').pop()?.toUpperCase()} • {formatFileSize(track.fileSize)}
                 </p>
               </div>
-              <div className="flex items-center space-x-2 mt-2 md:mt-0">
+              <motion.div 
+                className="flex items-center space-x-2 mt-2 md:mt-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
                 <Badge variant="destructive">Processing Failed</Badge>
-              </div>
+              </motion.div>
             </div>
-            <div className="text-red-400 text-sm mb-4">
+            <motion.div 
+              className="text-red-400 text-sm mb-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
               There was an error processing this track. Please try uploading it again.
-            </div>
-            <div className="flex justify-end">
+            </motion.div>
+            <motion.div 
+              className="flex justify-end"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
@@ -181,7 +206,7 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
                     Delete
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className="scale-in">
                   <AlertDialogHeader>
                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -194,22 +219,32 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </div>
+            </motion.div>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   // Completed track with players
   return (
-    <div className="bg-gray-800 rounded-xl p-6 mb-6">
+    <motion.div 
+      className="bg-gray-800 rounded-xl p-6 mb-6"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 100, damping: 15 }}
+    >
       <div className="flex flex-col md:flex-row md:items-start gap-4">
-        <div className="flex-shrink-0 w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
+        <motion.div 
+          className="flex-shrink-0 w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center"
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+        >
           <Music className="h-8 w-8 text-primary" />
-        </div>
+        </motion.div>
         <div className="flex-grow w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 stagger-fade-in">
             <div>
               <h4 className="text-lg font-medium">{track.originalFilename}</h4>
               <p className="text-gray-400 text-sm">
@@ -217,7 +252,7 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
               </p>
             </div>
             <div className="flex items-center space-x-2 mt-2 md:mt-0">
-              <Badge className="bg-green-500/20 text-green-500 hover:bg-green-500/30">Completed</Badge>
+              <Badge className="bg-green-500/20 text-green-500 hover:bg-green-500/30 fade-in">Completed</Badge>
             </div>
           </div>
           
@@ -234,7 +269,12 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
             onEffectsUpdated={onDeleted}
           />
           
-          <div className="flex justify-end gap-2">
+          <motion.div 
+            className="flex justify-end gap-2"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.3 }}
+          >
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" className="bg-gray-700 hover:bg-gray-600">
@@ -242,7 +282,7 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
                   Delete
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="scale-in">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                   <AlertDialogDescription>
@@ -260,9 +300,9 @@ export default function Track({ track, isProcessing, onDeleted }: TrackProps) {
               <Download className="h-5 w-5 mr-1" />
               Download Lo-Fi
             </Button>
-          </div>
+          </motion.div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

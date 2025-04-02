@@ -5,6 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Track, Effects } from "@/lib/types";
+import { motion } from "framer-motion";
 
 interface EffectControlsProps {
   track: Track;
@@ -67,20 +68,54 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
     }
   };
 
+  // Define animation variants for staggered animations
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.07,
+        delayChildren: 0.2
+      }
+    }
+  };
+  
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="bg-gray-900/50 rounded-lg p-4 mb-4">
-      <div className="text-sm font-medium mb-4 flex justify-between items-center">
-        <span>Lo-Fi Effect Controls</span>
-        <button 
+    <motion.div 
+      className="bg-gray-900/50 rounded-lg p-4 mb-4"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4 }}
+    >
+      <motion.div 
+        className="text-sm font-medium mb-4 flex justify-between items-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <span className="text-gradient">Lo-Fi Effect Controls</span>
+        <motion.button 
           className="text-xs text-secondary hover:underline"
           onClick={resetEffects}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           Reset to Default
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div>
+      <motion.div 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Vinyl Crackle</label>
           <div className="flex items-center">
             <Slider 
@@ -93,9 +128,9 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.vinylCrackle}%</span>
           </div>
-        </div>
+        </motion.div>
         
-        <div>
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Reverb</label>
           <div className="flex items-center">
             <Slider 
@@ -108,9 +143,9 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.reverb}%</span>
           </div>
-        </div>
+        </motion.div>
         
-        <div>
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Beat Slowdown</label>
           <div className="flex items-center">
             <Slider 
@@ -123,9 +158,9 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.beatSlowdown}%</span>
           </div>
-        </div>
+        </motion.div>
         
-        <div>
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Bass Boost</label>
           <div className="flex items-center">
             <Slider 
@@ -138,9 +173,9 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.bassBoost}%</span>
           </div>
-        </div>
+        </motion.div>
         
-        <div>
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Bit Crushing</label>
           <div className="flex items-center">
             <Slider 
@@ -153,9 +188,9 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.bitCrushing}%</span>
           </div>
-        </div>
+        </motion.div>
         
-        <div>
+        <motion.div variants={itemVariants}>
           <label className="block text-sm text-gray-400 mb-1">Background Noise</label>
           <div className="flex items-center">
             <Slider 
@@ -168,19 +203,34 @@ export default function EffectControls({ track, onEffectsUpdated }: EffectContro
             />
             <span className="text-xs ml-2 w-7 text-right">{effects.backgroundNoise}%</span>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
       
-      <div className="mt-4 flex justify-end">
-        <Button 
-          className="bg-secondary hover:bg-secondary/90 text-white"
-          disabled={isApplying}
-          onClick={applyEffects}
+      <motion.div 
+        className="mt-4 flex justify-end"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <RefreshCw className="h-5 w-5 mr-1" />
-          {isApplying ? 'Processing...' : 'Regenerate Lo-Fi'}
-        </Button>
-      </div>
-    </div>
+          <Button 
+            className="bg-secondary hover:bg-secondary/90 text-white glow-secondary"
+            disabled={isApplying}
+            onClick={applyEffects}
+          >
+            <motion.div
+              animate={{ rotate: isApplying ? 360 : 0 }}
+              transition={{ duration: 2, repeat: isApplying ? Infinity : 0, ease: "linear" }}
+            >
+              <RefreshCw className="h-5 w-5 mr-1" />
+            </motion.div>
+            {isApplying ? 'Processing...' : 'Regenerate Lo-Fi'}
+          </Button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   );
 }
